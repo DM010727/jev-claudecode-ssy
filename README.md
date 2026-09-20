@@ -1,191 +1,126 @@
-# fast-jev-compaction
+# Jev Claude Code · 胜算云版
 
-Claude Code plugin that replaces the compaction summary with Jev decisions:
-every tool call and result is scored in one fast request, stale ones are
-dropped or truncated, everything kept stays verbatim. Also usable as an npm
-library.
+通过胜算云 Jev Decisions API 自动压缩 Claude Code 上下文。它不改写用户和助手文本，只删除已经不再需要的工具调用，或截短不再需要保留全文的工具结果。
 
-## What and why
+## 30 秒接入
 
-Most context compaction asks an LLM to summarize old turns. A summary is
-lossy: a file path, exact error, constraint, or command can disappear even when
-it matters later. This library never rewrites anything. It only deletes tool
-calls and tool results Jev says are no longer needed, and it asks Jev while
-showing it the whole conversation. User and assistant text stays verbatim and
-in order.
-
-The repository is both an npm package (`src/`) and a Claude Code plugin
-(`hooks/`, `.claude-plugin/`) that uses the package to replace Claude Code's
-built-in compaction summary with the original messages.
-
-## How it works
-
-1. Every `tool_use` is paired with its `tool_result` by `tool_use_id`. Calls in
-   the first message or in the newest `preserveRecentMessages` messages are
-   pinned and never touched.
-2. The **state** sent to Jev is the whole conversation so far, oldest first,
-   with every tool result replaced by a short note (`ok, 4213 chars (omitted)`).
-   Tool inputs are included, texts are included, nothing is summarized.
-3. The state is fitted into `maxStateTokens` (25k by default) in stages, each
-   applied only if the previous one was not enough: tool inputs truncated to
-   1000, then 200, then 60 characters; long texts abridged to head + tail,
-   oldest non-pinned messages first; old non-pinned messages collapsed to a
-   `[… N chars omitted …]` note; old tool calls reduced to one line each
-   (`t12 Read file_path=src/a.ts → ok 480ch`); old call-less messages left
-   out; runs of old call-only messages folded into one entry. If it still
-   does not fit, compaction throws. Tokens are estimated without a tokenizer (a
-   word per six letters, half a token per digit, ~one per other symbol),
-   calibrated to land a little above the counts Jev reports.
-4. For every non-pinned call Jev gets two `noul` questions: should the **call**
-   stay (knowing it was made, with its input, still matters), and should the
-   **result** stay verbatim (its contents are still needed and re-running the
-   tool would not do).
-5. Questions are split into as many requests as needed so state plus questions
-   stays under `maxRequestTokens` (30k by default, under Jev's 32k request
-   limit). The same full state is resent with every request; requests run
-   concurrently and their answers are merged.
-6. Decisions per call, against `keepThreshold`:
-   - `keepResult ≥ threshold` → keep call and result;
-   - else `keepCall ≥ threshold` → keep the call, truncate the result to its
-     first `truncateHeadChars` characters plus a one-line note;
-   - else → remove the call together with its result.
-7. The message list is rebuilt: a message that loses all its content is
-   removed, untouched messages are returned as the same objects, and no result
-   is ever left without its call.
-
-Jev failures, malformed answers, a missing key, or a history that cannot be
-fitted throw; the caller (or the Claude Code hook) decides what to fall back to.
-
-## Install and usage
+在 PowerShell、CMD、Bash 或 Zsh 中运行同一条命令：
 
 ```sh
-npm install fast-jev-compaction
-export TYPESAFE_API_KEY=...
+npx --yes github:DM010727/jev-claudecode-ssy
 ```
 
-```ts
-import { compactMessages, reductionRatio, type Message } from 'fast-jev-compaction';
+安装器会自动：
 
-const transcript: Message[] = [
-  { role: 'user', text: 'Fix the failing test. Never edit src/generated.', toolUses: [] },
-  {
-    role: 'assistant',
-    text: '',
-    toolUses: [{ tool_use_id: 'toolu_1', tool: 'Read', input: { file_path: 'src/a.ts' } }],
-  },
-  { role: 'user', text: '', toolUses: [], toolResults: [{ tool_use_id: 'toolu_1', text: '…file…' }] },
-  // …
-];
+1. 检查 Claude Code；低于 `2.1.274` 时调用官方更新命令。
+2. 合并 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` 到用户设置，保留现有配置并在修改前备份。
+3. 注册本仓库为插件 marketplace，并安装或更新插件。
+4. 让 Claude Code 用敏感配置框收取胜算云 API Key；Key 不写入仓库。
 
-const result = await compactMessages(transcript, { preserveRecentMessages: 4 });
-console.log(result.messages, result.decisions, result.stats);
-if (reductionRatio(result) < 0.25) {
-  // not worth it: keep the original transcript, or summarize instead
+完成后重启 Claude Code，或在当前会话执行 `/reload-plugins`。
+
+### 直接对 Claude Code 说一句话
+
+把下面这句话发给 Claude Code 即可：
+
+> 请帮我接入胜算云 Jev 上下文压缩插件：运行 `npx --yes github:DM010727/jev-claudecode-ssy`，完成后提醒我执行 `/reload-plugins`；API Key 只允许我在 Claude Code 的敏感配置界面输入，不要写进代码、命令或聊天记录。
+
+### 手动安装（备用）
+
+```sh
+claude plugin marketplace add DM010727/jev-claudecode-ssy
+claude plugin install jev-claudecode-ssy@jev-claudecode-ssy
+```
+
+手动方式还需要在 `~/.claude/settings.json`（Windows 为 `%USERPROFILE%\.claude\settings.json`）中启用函数钩子：
+
+```json
+{
+  "env": {
+    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
+  }
 }
 ```
 
-`Message` is a subset of Claude Code's `SessionMessage`, so a session transcript
-can be passed in as is.
+## 胜算云接口
 
-To bring your own transport, implement `JevAsker` (one `ask(state, questions)`
-method) and call `compact(messages, asker, options)`; `buildJevRequest` and
-`parseJevResponse` give you the HTTP request body and response validation.
-The building blocks (`collectToolCalls`, `fitState`, `batchCalls`,
-`decideCall`, `applyDecisions`) are exported too.
+默认请求与 `typesafe-jev-decisions-openapi.json` 一致：
 
-`apiKey` defaults to `process.env.TYPESAFE_API_KEY`. Never commit the key or
-put it in a source file.
+- Endpoint：`POST https://router.shengsuanyun.com/api/v1/decisions`
+- 认证：`Authorization: Bearer <胜算云 API Key>`
+- 默认模型：`jev-latest`
+- 请求：`{ model, state, questions }`
+- 响应：`{ model, answers, usage }`
 
-## Options
+插件优先读取 Claude Code 的敏感 `apiKey` 配置，也支持环境变量 `SSY_API_KEY`。不要把 Key 提交到 Git、写进源码或示例文件。
 
-| Option | Default | Description |
-| --- | --- | --- |
-| `apiKey` | `TYPESAFE_API_KEY` | TypeSafe API key (`compactMessages`/`JevClient`) |
-| `model` | `jev-latest` | Jev model name |
-| `baseUrl` | `https://api.typesafe.ai/v1/systemone` | System One endpoint |
-| `fetch` | native `fetch` | Injectable fetch implementation for tests |
-| `goal` | last 3 user prompts | Ongoing task description included in the state |
-| `keepThreshold` | `0.5` | Minimum keep probability for a call or result to stay |
-| `preserveRecentMessages` | `6` | Newest messages never touched (the first is always kept) |
-| `maxStateTokens` | `25000` | Estimated token ceiling for the state |
-| `maxRequestTokens` | `30000` | Estimated ceiling for state plus one batch of questions |
-| `truncateHeadChars` | `300` | Characters of a dropped tool result retained before its note |
+## 工作原理
 
-`result.stats` reports message and character counts before and after, the
-per-reason decision counts, the state size in estimated tokens, which fitting
-stage was needed, and the number of requests.
+1. 按 `tool_use_id` 配对工具调用和结果；第一条消息及最近消息固定保留。
+2. 把完整对话状态发送给 Jev，但工具结果仅保留“成功/失败 + 字符数”摘要。
+3. 对每个候选工具调用询问两个 `noul` 问题：调用本身是否仍重要、结果全文是否仍需要。
+4. 按概率决定保留、仅截短结果或同时删除调用与结果。
+5. Jev 请求失败、响应不合法或压缩收益不足时，自动回退 Claude Code 内置压缩。
 
-## Limitations
+默认在上下文达到 60% 时触发，最近 6 条消息不参与裁剪，只有预计至少减少 25% 才替换内置压缩。
 
-- Only tool calls and results are candidates; text messages are never removed
-  or shortened in the output (they are only abridged in the state Jev sees).
-- Token sizes are estimates from character counts, not a tokenizer.
-- Calibration is at the request level; a probability is not a proof that a
-  result is safe to delete. The assistant can always re-run the tool.
-- The full state is repeated with every request, so a history near the state
-  ceiling costs one request per handful of questions.
+## 配置
 
-## Claude Code plugin
+安装或启用插件时，Claude Code 会展示以下配置项：
 
-The repository root is a Claude Code function-hook plugin: `hooks/fast-jev.ts`
-is a thin adapter that feeds `session.compact` transcripts through `src/` and
-falls back to Claude Code's built-in summary on errors or insufficient
-reduction. See [`hooks/README.md`](hooks/README.md) for configuration and the
-Claude Code 2.1.274 type reference.
+| 配置项 | 默认值 | 说明 |
+| --- | ---: | --- |
+| `apiKey` | 推荐配置 | 胜算云 API Key，按敏感信息保存；也可使用 `SSY_API_KEY` |
+| `model` | `jev-latest` | 胜算云 Jev 模型 |
+| `keepThreshold` | `0.5` | 保留调用或结果的最低概率 |
+| `preserveRecentMessages` | `6` | 固定保留的最近消息数 |
+| `compactAtPercent` | `60` | 自动触发压缩的上下文百分比 |
+| `minReductionRatio` | `0.25` | 接管内置压缩所需的最低缩减比例 |
+| `maxStateTokens` | `25000` | 发送给 Jev 的状态预算 |
+| `maxRequestTokens` | `30000` | 单次请求总预算 |
+| `truncateHeadChars` | `300` | 截短结果时保留的头部字符数 |
 
-### Install in Claude Code
-
-Function hooks are an early-access Claude Code feature (2.1.274+), so the
-opt-in flag must be set wherever Claude Code runs, e.g. in `~/.claude/settings.json`:
-
-```json
-{ "env": { "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1", "TYPESAFE_API_KEY": "<your key>" } }
-```
-
-Then add this repository as a plugin marketplace and install the plugin,
-either from the shell or as slash commands inside a session:
+## 作为 TypeScript 库使用
 
 ```sh
-claude plugin marketplace add tamaratran/fast-jev-compaction
-claude plugin install fast-jev-compaction@fast-jev-compaction
+npm install github:DM010727/jev-claudecode-ssy
 ```
 
-The install prompts for the plugin options (API key, thresholds, `truncateHeadChars`,
-…); leave them at their defaults to use `TYPESAFE_API_KEY` from the environment.
-Restart Claude Code or run `/reload-plugins`. From then on `/compact` (and
-auto-compaction) goes through Jev: the toast reads
-`fast-jev-compaction: kept N/M messages, no summary (…)` when the pruned history
-replaced the built-in summary, or `fallback to built-in summary (…)` when Jev
-could not remove enough (short sessions, or when it fails).
+```ts
+import { compactMessages, type Message } from 'jev-claudecode-ssy';
 
-To run from a checkout without installing: `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .`
-from the repository root. No publishing step is required; the marketplace is
-just the repo's `.claude-plugin/marketplace.json`.
+const messages: Message[] = [
+  { role: 'user', text: '修复测试，禁止修改 generated 目录。', toolUses: [] },
+];
 
-## Development
+const result = await compactMessages(messages, {
+  apiKey: process.env.SSY_API_KEY,
+  preserveRecentMessages: 4,
+});
+
+console.log(result.messages, result.stats);
+```
+
+可以通过 `baseUrl` 覆盖默认地址，通过实现 `JevAsker` 使用自定义传输层。完整构建块仍从包入口导出。
+
+## 本地开发
 
 ```sh
 npm install
-npm run typecheck        # library + hook
+npm run typecheck
 npm test
 npm run build
-npm run validate:plugin  # claude plugin validate
-TYPESAFE_API_KEY="$(cat ~/.typesafe_key)" npm run demo
+npm run validate:plugin
 ```
 
-The unit tests use a fake Jev and never contact TypeSafe. The demo is the live
-network check.
-
-## Animated demo (macOS)
-
-`demo/JevDemo` is a small native SwiftUI app that plays a scripted, dramatized
-version of the compaction flow inside a Claude Code-style terminal: the tool
-calls of a canned transcript are scored, results and calls Jev lets go turn red
-and collapse away, and the rest stays verbatim. It never calls the API; it
-exists to be screen recorded.
+单元测试使用假 Jev 响应，不会请求胜算云，也不会消耗额度。若要从当前 checkout 直接加载：
 
 ```sh
-demo/JevDemo/build.sh   # builds demo/JevDemo/build/JevDemo.app and launches it
+CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .
 ```
 
-Press space in the app to replay from the start.
+## 限制
+
+- 函数钩子仍属于 Claude Code 的早期能力，升级 Claude Code 后应重新运行类型检查和插件验证。
+- Token 数为估算值，不是模型 tokenizer 的精确结果。
+- Jev 给出的概率不是绝对证明；需要时 Claude Code 仍可重新运行工具。

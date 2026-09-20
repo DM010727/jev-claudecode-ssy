@@ -1,13 +1,19 @@
 {
-  "name": "fast-jev-compaction",
-  "version": "0.3.0",
-  "description": "Verbatim Jev-guided compaction for Claude Code sessions.",
+  "name": "jev-claudecode-ssy",
+  "displayName": "Jev Context Compaction · Shengsuanyun",
+  "version": "1.0.0",
+  "description": "Verbatim Jev-guided context compaction for Claude Code through Shengsuanyun.",
+  "author": {
+    "name": "DM010727"
+  },
+  "homepage": "https://github.com/DM010727/jev-claudecode-ssy",
+  "repository": "https://github.com/DM010727/jev-claudecode-ssy.git",
   "license": "MIT",
   "userConfig": {
     "apiKey": {
       "type": "string",
-      "title": "TypeSafe API key",
-      "description": "TypeSafe API key. Leave unset to use TYPESAFE_API_KEY.",
+      "title": "Shengsuanyun API key",
+      "description": "Shengsuanyun API key. Stored as a masked Claude Code secret. You can alternatively set SSY_API_KEY.",
       "sensitive": true
     },
     "keepThreshold": {
@@ -55,7 +61,7 @@
     "model": {
       "type": "string",
       "title": "Jev model",
-      "description": "TypeSafe Jev model name.",
+      "description": "Jev model name exposed by Shengsuanyun.",
       "default": "jev-latest"
     }
   }

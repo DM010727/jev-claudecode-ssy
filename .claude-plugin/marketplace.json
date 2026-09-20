@@ -1,15 +1,16 @@
 {
-  "name": "fast-jev-compaction",
+  "name": "jev-claudecode-ssy",
+  "description": "Claude Code context compaction plugins powered by Shengsuanyun Jev Decisions.",
   "owner": {
-    "name": "tamaratran",
-    "url": "https://github.com/tamaratran"
+    "name": "DM010727",
+    "url": "https://github.com/DM010727"
   },
   "plugins": [
     {
-      "name": "fast-jev-compaction",
+      "name": "jev-claudecode-ssy",
       "source": "./",
-      "description": "Verbatim Jev-guided compaction for Claude Code sessions.",
-      "version": "0.3.0",
+      "description": "Verbatim Jev-guided context compaction for Claude Code through Shengsuanyun.",
+      "version": "1.0.0",
       "license": "MIT"
     }
   ]

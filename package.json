@@ -1,11 +1,19 @@
 {
-  "name": "fast-jev-compaction",
-  "version": "0.2.0",
-  "description": "Continuous, verbatim context compaction for LLM agents using TypeSafe's Jev model.",
+  "name": "jev-claudecode-ssy",
+  "version": "1.0.0",
+  "description": "One-command Jev context compaction for Claude Code through Shengsuanyun.",
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/DM010727/jev-claudecode-ssy.git"
+  },
+  "homepage": "https://github.com/DM010727/jev-claudecode-ssy#readme",
   "engines": {
     "node": ">=18"
+  },
+  "bin": {
+    "jev-claudecode-ssy": "./bin/setup.mjs"
   },
   "exports": {
     ".": {
@@ -15,6 +23,7 @@
   },
   "files": [
     "dist",
+    "bin",
     "README.md",
     "LICENSE"
   ],
@@ -24,7 +33,7 @@
     "test": "vitest run",
     "demo": "tsx examples/demo.ts",
     "typecheck:hooks": "tsc -p tsconfig.hooks.json",
-    "validate:plugin": "claude plugin validate .claude-plugin/plugin.json"
+    "validate:plugin": "claude plugin validate ."
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

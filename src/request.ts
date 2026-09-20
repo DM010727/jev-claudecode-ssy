@@ -1,6 +1,10 @@
 import type { JevAnswer, JevQuestions, JevResponse, JevState } from './types.js';
 
-export const SYSTEM_ONE_URL = 'https://api.typesafe.ai/v1/systemone';
+/** Shengsuanyun's OpenAI-compatible gateway endpoint for Jev Decisions. */
+export const SHENGSUANYUN_DECISIONS_URL =
+  'https://router.shengsuanyun.com/api/v1/decisions';
+/** @deprecated Use `SHENGSUANYUN_DECISIONS_URL`. */
+export const SYSTEM_ONE_URL = SHENGSUANYUN_DECISIONS_URL;
 export const DEFAULT_MODEL = 'jev-latest';
 
 export interface JevRequest {
@@ -21,7 +25,7 @@ export function buildJevRequest(
   questions: JevQuestions,
 ): JevRequest {
   return {
-    url: params.baseUrl ?? SYSTEM_ONE_URL,
+    url: params.baseUrl ?? SHENGSUANYUN_DECISIONS_URL,
     method: 'POST',
     headers: {
       authorization: `Bearer ${params.apiKey}`,
