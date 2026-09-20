@@ -22,8 +22,10 @@ npx --yes github:DM010727/jev-claudecode-ssy
 在“终端”中运行：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/42f390ad09ce4452999ae13b99c26aacdd519f43/install.sh | bash
 ```
+
+该命令固定使用修复后的安装器，启动时显示 `安装器 20260920.2`；插件仍从 marketplace 更新到最新版本。
 
 安装程序会直接提示输入胜算云 API Key。输入内容不会显示在屏幕上，按回车即可继续。安装完成后，请**彻底退出所有 Claude Code 进程再重新打开**。函数 hook 在进程内注册，更新后不要只在旧会话执行 `/reload-plugins`。
 
@@ -140,7 +142,7 @@ Claude Code 使用精简后的原始对话继续编码
 macOS 直接使用不依赖 npx 的安装命令：
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/42f390ad09ce4452999ae13b99c26aacdd519f43/install.sh | bash
 ```
 
 如果旧安装脚本提示 `Unexpected character { at line 1` 或 `SETTINGS_FILE: unbound variable`，重新运行上面的命令即可。`1.1.2` 起不再使用 `plutil` 解析 Claude Code 的 JSON 设置。
