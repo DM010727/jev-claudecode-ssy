@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   compactSession,
+  curlFetch,
   decisionLog,
   decisionLogLines,
   resolveHookConfig,
@@ -145,5 +146,59 @@ describe('compactSession', () => {
     await expect(
       compactSession(transcript(), { ...config, apiKey: 'k' }, async () => ({ status: 500, ok: false, text: 'x' })),
     ).rejects.toThrow(/500/);
+  });
+});
+
+describe('curl transport', () => {
+  it('passes secrets through stdin and parses the response status', async () => {
+    const calls: Array<{ argv: readonly string[]; stdin: string; timeoutMs?: number }> = [];
+    const response = await curlFetch(
+      async (argv, init) => {
+        calls.push({ argv, stdin: init?.stdin ?? '', timeoutMs: init?.timeoutMs });
+        return {
+          exitCode: 0,
+          stdout: '{"answers":{}}\n__JEV_HTTP_STATUS__:200',
+          stderr: '',
+        };
+      },
+      'https://router.shengsuanyun.com/api/v1/decisions',
+      {
+        method: 'POST',
+        headers: { authorization: 'Bearer secret-key', 'content-type': 'application/json' },
+        body: '{"state":"quoted \\\"value\\\""}',
+      },
+    );
+
+    expect(response).toEqual({ status: 200, ok: true, text: '{"answers":{}}' });
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.argv).toEqual(['curl', '-q', '--config', '-']);
+    expect(calls[0]?.argv.join(' ')).not.toContain('secret-key');
+    expect(calls[0]?.stdin).toContain('authorization: Bearer secret-key');
+    expect(calls[0]?.stdin).toContain('data-binary');
+    expect(calls[0]?.timeoutMs).toBe(75_000);
+  });
+
+  it('returns non-2xx responses for the Jev parser and sanitizes process failures', async () => {
+    await expect(
+      curlFetch(
+        async () => ({
+          exitCode: 0,
+          stdout: '{"error":{"code":"invalid_api_key"}}\n__JEV_HTTP_STATUS__:401',
+          stderr: '',
+        }),
+        'https://router.shengsuanyun.com/api/v1/decisions',
+      ),
+    ).resolves.toEqual({
+      status: 401,
+      ok: false,
+      text: '{"error":{"code":"invalid_api_key"}}',
+    });
+
+    await expect(
+      curlFetch(
+        async () => ({ exitCode: 6, stdout: '', stderr: 'Could not resolve host' }),
+        'https://router.shengsuanyun.com/api/v1/decisions',
+      ),
+    ).rejects.toThrow('curl failed (6): Could not resolve host');
   });
 });

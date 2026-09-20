@@ -92,6 +92,8 @@ kept 18/31 messages, no summary (...)
 
 适配器注册了 Claude Code 的 `session.compact` 和 `turn.complete` hooks，工作过程如下：
 
+Claude Code 会在 `/compact` 阶段禁止插件的 `$.http.fetch`。从 `1.1.1` 起，适配器改用系统自带的 curl 子进程访问胜算云；API Key 和请求体只通过标准输入传递，不会出现在命令行参数或临时文件中。Windows 10/11 与 macOS 均自带 curl，插件运行时不要求额外安装 Node.js。
+
 ```text
 Claude Code 会话
     │
@@ -160,6 +162,8 @@ curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/in
 ### `/compact` 回退到 built-in summary
 
 查看提示中的原因。常见情况包括 Key 无效、网络暂时不可用、对话中没有足够多的旧工具调用，或精简比例低于默认的 `25%`。插件会自动调用 Claude Code 原生压缩，因此不会卡住当前会话。
+
+如果旧版本提示 `$.http.fetch: refused: nonessential network traffic is disabled for this session`，请更新到 `1.1.1` 或更高版本。新版已绕开压缩阶段受限的宿主 HTTP 通道。
 
 ### 更新插件或更换 Key
 

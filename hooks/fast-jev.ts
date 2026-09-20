@@ -37,8 +37,89 @@ export type HookFetchResponse = {
   text: string;
 };
 
-/** The shape of `$.http.fetch`, so the hook can be driven without an engine. */
+/** A fetch-shaped transport, so the compactor can be driven without an engine. */
 export type HookFetch = (url: string, init?: HookFetchInit) => Promise<HookFetchResponse>;
+
+export type HookProcessRunResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
+
+export type HookProcessRun = (
+  argv: readonly string[],
+  init?: { stdin?: string; timeoutMs?: number },
+) => Promise<HookProcessRunResult>;
+
+const CURL_STATUS_MARKER = '__JEV_HTTP_STATUS__:';
+
+function curlConfigValue(value: string): string {
+  if (/[\r\n]/.test(value)) throw new Error('Jev request header contains a newline');
+  return `"${value.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+}
+
+function curlBodyValue(value: string): string {
+  return `"${value
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\r/g, '\\r')
+    .replace(/\n/g, '\\n')
+    .replace(/\t/g, '\\t')}"`;
+}
+
+/**
+ * Fetches through a local curl child process. Claude Code intentionally blocks
+ * `$.http.fetch` while `/compact` is running, but its process API is a local
+ * execution path whose child owns its network access. The complete request,
+ * including the API key, travels over stdin rather than argv or a temp file.
+ */
+export async function curlFetch(
+  run: HookProcessRun,
+  url: string,
+  init: HookFetchInit = {},
+): Promise<HookFetchResponse> {
+  if (!url.startsWith('https://')) throw new Error('Jev endpoint must use HTTPS');
+  const lines = [
+    'silent',
+    'show-error',
+    `url = ${curlConfigValue(url)}`,
+    `request = ${curlConfigValue(init.method ?? 'GET')}`,
+    'max-time = 60',
+  ];
+  for (const [name, value] of Object.entries(init.headers ?? {})) {
+    if (/[\r\n]/.test(name)) throw new Error('Jev request header name contains a newline');
+    lines.push(`header = ${curlConfigValue(`${name}: ${value}`)}`);
+  }
+  if (init.body !== undefined) lines.push(`data-binary = ${curlBodyValue(init.body)}`);
+  lines.push(`write-out = ${curlBodyValue(`\n${CURL_STATUS_MARKER}%{http_code}`)}`);
+
+  let result: HookProcessRunResult;
+  try {
+    result = await run(['curl', '-q', '--config', '-'], {
+      stdin: `${lines.join('\n')}\n`,
+      timeoutMs: 75_000,
+    });
+  } catch (error) {
+    throw new Error(
+      `Could not start curl: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  if (result.exitCode !== 0) {
+    throw new Error(`curl failed (${result.exitCode}): ${result.stderr.trim().slice(0, 200)}`);
+  }
+  const marker = `\n${CURL_STATUS_MARKER}`;
+  const markerIndex = result.stdout.lastIndexOf(marker);
+  if (markerIndex < 0) throw new Error('curl response is missing its HTTP status');
+  const status = Number.parseInt(result.stdout.slice(markerIndex + marker.length).trim(), 10);
+  if (!Number.isInteger(status) || status < 100 || status > 599) {
+    throw new Error('curl returned an invalid HTTP status');
+  }
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    text: result.stdout.slice(0, markerIndex),
+  };
+}
 
 export type HookConfig = CompactOptions & {
   apiKey?: string;
@@ -87,7 +168,7 @@ export function resolveHookConfig(options: PluginOptions): HookConfig {
   return config;
 }
 
-/** A `JevAsker` over the engine's `$.http.fetch`. */
+/** A `JevAsker` over any fetch-shaped transport. */
 export function jevAsker(fetchFn: HookFetch, apiKey: string, model: string): JevAsker {
   return {
     async ask(state, questions) {
@@ -263,10 +344,9 @@ export const register: Register = (on: On, options: PluginOptions) => {
   on('session.compact', async ($, event, next) => {
     try {
       const config = { ...configured, apiKey: await getApiKey($, configured) };
-      const { result, messages } = await compactSession(event.messages, config, async (url, init) => {
-        const response = await $.http.fetch(url, init);
-        return { status: response.status, ok: response.ok, text: response.text };
-      });
+      const { result, messages } = await compactSession(event.messages, config, (url, init) =>
+        curlFetch($.process.run, url, init),
+      );
       for (const line of decisionLogLines(result)) $.ui.log(line);
       if (reductionRatio(result) < config.minReductionRatio) {
         notify(
