@@ -147,6 +147,8 @@ macOS 直接使用不依赖 npx 的安装命令：
 curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/install.sh | bash
 ```
 
+如果旧安装脚本提示 `Unexpected character { at line 1` 或 `SETTINGS_FILE: unbound variable`，重新运行上面的命令即可。`1.1.2` 起不再使用 `plutil` 解析 Claude Code 的 JSON 设置。
+
 ### 安装时没有让我输入 Key
 
 重新运行上面的最新安装命令。`1.0.2` 及以上版本会在每次安装或更新时主动询问 Key，即使电脑中已经存在相关环境变量。

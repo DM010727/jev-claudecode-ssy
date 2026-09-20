@@ -26,23 +26,57 @@ SETTINGS_FILE="$CONFIG_DIR/settings.json"
 mkdir -p "$CONFIG_DIR"
 
 if [[ -f "$SETTINGS_FILE" ]]; then
-  if ! /usr/bin/plutil -lint "$SETTINGS_FILE" >/dev/null; then
-    echo "无法解析 $SETTINGS_FILE；为避免覆盖现有设置，安装已停止。" >&2
-    exit 1
-  fi
   cp "$SETTINGS_FILE" "$SETTINGS_FILE.jev-ssy-$(date +%Y%m%d%H%M%S).bak"
 else
   printf '{}\n' > "$SETTINGS_FILE"
 fi
 
-if ! /usr/bin/plutil -extract env json -o - "$SETTINGS_FILE" >/dev/null 2>&1; then
-  /usr/bin/plutil -insert env -json '{}' "$SETTINGS_FILE"
+# Some macOS releases only parse property lists with plutil and reject JSON at
+# its first "{". JXA is built into macOS and gives us a real JSON parser without
+# requiring Node.js, Python or jq.
+if ! /usr/bin/osascript -l JavaScript - "$SETTINGS_FILE" <<'JXA'
+ObjC.import('Foundation');
+
+function run(argv) {
+  const settingsPath = argv[0];
+  const source = $.NSString.stringWithContentsOfFileEncodingError(
+    $(settingsPath),
+    $.NSUTF8StringEncoding,
+    null,
+  );
+  if (!source) throw new Error(`无法读取 ${settingsPath}`);
+
+  const raw = ObjC.unwrap(source).replace(/^\uFEFF/, '');
+  let settings;
+  try {
+    settings = JSON.parse(raw || '{}');
+  } catch (error) {
+    throw new Error(`无法解析 ${settingsPath}: ${error.message}`);
+  }
+  if (!settings || typeof settings !== 'object' || Array.isArray(settings)) {
+    throw new Error(`${settingsPath} 的顶层必须是 JSON 对象`);
+  }
+  if (settings.env === undefined) settings.env = {};
+  if (!settings.env || typeof settings.env !== 'object' || Array.isArray(settings.env)) {
+    throw new Error(`${settingsPath} 中的 env 必须是 JSON 对象`);
+  }
+
+  settings.env.CLAUDE_CODE_ENABLE_FUNCTION_HOOKS = '1';
+  const output = `${JSON.stringify(settings, null, 2)}\n`;
+  const written = $(output).writeToFileAtomicallyEncodingError(
+    $(settingsPath),
+    true,
+    $.NSUTF8StringEncoding,
+    null,
+  );
+  if (!written) throw new Error(`无法写入 ${settingsPath}`);
+}
+JXA
+then
+  echo "无法安全更新 $SETTINGS_FILE；原文件未被覆盖，安装已停止。" >&2
+  exit 1
 fi
-if /usr/bin/plutil -extract env.CLAUDE_CODE_ENABLE_FUNCTION_HOOKS raw -o - "$SETTINGS_FILE" >/dev/null 2>&1; then
-  /usr/bin/plutil -replace env.CLAUDE_CODE_ENABLE_FUNCTION_HOOKS -string '1' "$SETTINGS_FILE"
-else
-  /usr/bin/plutil -insert env.CLAUDE_CODE_ENABLE_FUNCTION_HOOKS -string '1' "$SETTINGS_FILE"
-fi
+chmod 600 "$SETTINGS_FILE"
 echo "已启用函数钩子：$SETTINGS_FILE"
 
 printf '请输入胜算云 API Key（输入内容会隐藏，按 Enter 确认）：' > /dev/tty
