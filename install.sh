@@ -6,7 +6,6 @@ umask 077
 MARKETPLACE_SOURCE="DM010727/jev-claudecode-ssy"
 MARKETPLACE_NAME="jev-claudecode-ssy"
 PLUGIN_ID="jev-claudecode-ssy@jev-claudecode-ssy"
-PLUGIN_VERSION="1.1.5"
 
 if ! command -v claude >/dev/null 2>&1; then
   echo "未找到 Claude Code。请先安装：https://claude.ai/install" >&2
@@ -18,9 +17,9 @@ if [[ "$(uname -s)" != "Darwin" ]]; then
   exit 1
 fi
 
-echo "Jev Claude Code · 胜算云版：开始一键接入"
+printf '%s\n' 'Jev Claude Code · 胜算云版：开始一键接入（安装器 20260920.2）'
 echo "正在检查 Claude Code 更新…"
-claude update || echo "Claude Code 自动更新未完成，将继续尝试安装插件。"
+claude update </dev/null || echo "Claude Code 自动更新未完成，将继续尝试安装插件。"
 
 CONFIG_DIR="${CLAUDE_CONFIG_DIR:-$HOME/.claude}"
 SETTINGS_FILE="$CONFIG_DIR/settings.json"
@@ -74,11 +73,11 @@ function run(argv) {
 }
 JXA
 then
-  echo "无法安全更新 ${SETTINGS_FILE}；原文件未被覆盖，安装已停止。" >&2
+  printf '无法安全更新 %s；原文件未被覆盖，安装已停止。\n' "${SETTINGS_FILE}" >&2
   exit 1
 fi
 chmod 600 "$SETTINGS_FILE"
-echo "已启用函数钩子：$SETTINGS_FILE"
+printf '已启用函数钩子：%s\n' "${SETTINGS_FILE}"
 
 printf '请输入胜算云 API Key（输入内容会隐藏，按 Enter 确认）：' > /dev/tty
 IFS= read -r -s API_KEY < /dev/tty
@@ -89,12 +88,12 @@ if [[ -z "$API_KEY" ]]; then
 fi
 
 echo "正在注册并更新 marketplace…"
-claude plugin marketplace add "$MARKETPLACE_SOURCE" --scope user >/dev/null 2>&1 || true
-claude plugin marketplace update "$MARKETPLACE_NAME"
+claude plugin marketplace add "$MARKETPLACE_SOURCE" --scope user </dev/null >/dev/null 2>&1 || true
+claude plugin marketplace update "$MARKETPLACE_NAME" </dev/null
 
 echo "正在安装插件并写入 API Key…"
-claude plugin uninstall "$PLUGIN_ID" --scope user >/dev/null 2>&1 || true
-claude plugin install "$PLUGIN_ID" --scope user --config "apiKey=$API_KEY"
+claude plugin uninstall "$PLUGIN_ID" --scope user </dev/null >/dev/null 2>&1 || true
+claude plugin install "$PLUGIN_ID" --scope user --config "apiKey=$API_KEY" </dev/null
 
 REVIEW_CONFIG_DIR="$HOME/.jev-claudecode-ssy"
 mkdir -p "$REVIEW_CONFIG_DIR"
@@ -104,6 +103,6 @@ chmod 600 "$REVIEW_CONFIG_DIR/api-key"
 unset API_KEY
 
 echo
-echo "已安装 Jev Claude Code 胜算云适配器 v${PLUGIN_VERSION}。"
+printf '%s\n' 'Jev Claude Code 胜算云适配器已安装完成。'
 echo "请彻底退出所有 Claude Code 进程后重新打开；不要只在旧会话执行 /reload-plugins。"
 echo "Jev 并行审查工具也已配置完成。"
