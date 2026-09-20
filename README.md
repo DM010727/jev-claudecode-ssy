@@ -165,9 +165,9 @@ curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/in
 
 `1.1.3` 虽然已改用 curl，但其中一次 `$.process.run` 被作为函数值传递，未通过 Claude Code 的函数钩子安全扫描，表现为插件已启用却只加载 `review` Skill。`1.1.4` 已改为扫描器要求的直接调用，并以 `claude plugin validate .claude-plugin/plugin.json --strict` 作为发布前校验。
 
-重新打开 Claude Code 后，日志应显示 `jev-claudecode-ssy v1.1.4 loaded (curl transport)`。如果仍看到 `$.http.fetch`，说明当前进程加载的仍是旧插件，而不是胜算云接口故障。
+重新打开 Claude Code 后，日志应显示 `jev-claudecode-ssy v1.1.5 loaded (curl transport)`。如果仍看到 `$.http.fetch`，说明当前进程加载的仍是旧插件，而不是胜算云接口故障。
 
-Claude Code 当前的插件详情页只把传统 JSON/命令钩子计入 `Installed components`，不会把早期访问的函数钩子显示在该栏。因此页面仍可能只列出 `Skills: review`；这不代表 Jev 钩子没有运行，请以上面的 `v1.1.4 loaded` 启动日志为准。
+Claude Code 当前的插件详情页只把传统 JSON/命令钩子计入 `Installed components`，不会把早期访问的函数钩子显示在该栏。因此页面仍可能只列出 `Skills: review`；这不代表 Jev 钩子没有运行，请以上面的 `v1.1.5 loaded` 启动日志为准。
 
 ### 更新插件或更换 Key
 

@@ -57,7 +57,7 @@ export type CurlInvocation = {
 };
 
 const CURL_STATUS_MARKER = '__JEV_HTTP_STATUS__:';
-export const PLUGIN_VERSION = '1.1.4';
+export const PLUGIN_VERSION = '1.1.5';
 
 export function startupMessage(): string {
   return `jev-claudecode-ssy v${PLUGIN_VERSION} loaded (curl transport)`;

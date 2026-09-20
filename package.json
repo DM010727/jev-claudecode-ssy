@@ -1,6 +1,6 @@
 {
   "name": "jev-claudecode-ssy",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "description": "Jev context compaction and parallel PR review for Claude Code through Shengsuanyun.",
   "type": "module",
   "license": "MIT",

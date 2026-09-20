@@ -37,4 +37,10 @@ describe('macOS installer', () => {
     expect(firstUse).toBeGreaterThan(assignment);
     expect(installer).toContain('cp "$SETTINGS_FILE" "$SETTINGS_FILE.jev-ssy-');
   });
+
+  it('braces shell variables when non-ASCII punctuation follows them', () => {
+    expect(installer).toContain('v${PLUGIN_VERSION}。');
+    expect(installer).toContain('${SETTINGS_FILE}；');
+    expect(installer).not.toMatch(/\$[A-Za-z_][A-Za-z0-9_]*[^\x00-\x7F]/);
+  });
 });
