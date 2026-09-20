@@ -1,6 +1,6 @@
 {
   "name": "jev-claudecode-ssy",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "One-command Jev context compaction for Claude Code through Shengsuanyun.",
   "type": "module",
   "license": "MIT",

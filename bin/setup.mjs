@@ -45,16 +45,15 @@ export function enableFunctionHooks(settings) {
 function commandResult(args, options = {}) {
   return spawnSync('claude', args, {
     encoding: 'utf8',
-    shell: process.platform === 'win32',
     ...options,
   });
 }
 
-function runClaude(args) {
+function runClaude(args, label = 'Claude Code command') {
   const result = commandResult(args, { stdio: 'inherit' });
   if (result.error) throw result.error;
   if (result.status !== 0) {
-    throw new Error(`claude ${args.join(' ')} failed with exit code ${result.status ?? 'unknown'}`);
+    throw new Error(`${label} failed with exit code ${result.status ?? 'unknown'}`);
   }
 }
 
@@ -83,6 +82,79 @@ export function jsonContains(value, needle) {
     return Object.values(value).some((item) => jsonContains(item, needle));
   }
   return false;
+}
+
+export function pluginInstallArgs(apiKey) {
+  return [
+    'plugin',
+    'install',
+    PLUGIN_ID,
+    '--scope',
+    'user',
+    '--config',
+    `apiKey=${apiKey}`,
+  ];
+}
+
+/** Reads a secret from an interactive terminal while echoing only mask characters. */
+export function promptSecret({ input = process.stdin, output = process.stdout } = {}) {
+  if (!input.isTTY || typeof input.setRawMode !== 'function') {
+    return Promise.reject(
+      new Error('当前环境无法安全输入 API Key；请在 PowerShell、CMD、Bash 或 Zsh 终端中运行安装命令'),
+    );
+  }
+
+  output.write('请输入胜算云 API Key（输入内容会隐藏，按 Enter 确认）：');
+  return new Promise((resolve, reject) => {
+    let secret = '';
+
+    const cleanup = () => {
+      input.removeListener('data', onData);
+      input.setRawMode(false);
+      input.pause?.();
+    };
+    const finish = () => {
+      cleanup();
+      output.write('\n');
+      const value = secret.trim();
+      if (!value) reject(new Error('API Key 不能为空'));
+      else resolve(value);
+    };
+    const cancel = () => {
+      cleanup();
+      output.write('\n');
+      reject(new Error('用户取消了安装'));
+    };
+    const onData = (chunk) => {
+      for (const character of String(chunk)) {
+        if (character === '\r' || character === '\n') {
+          finish();
+          return;
+        }
+        if (character === '\u0003') {
+          cancel();
+          return;
+        }
+        if (character === '\u0008' || character === '\u007f') {
+          if (secret.length > 0) {
+            secret = secret.slice(0, -1);
+            output.write('\b \b');
+          }
+          continue;
+        }
+        const code = character.codePointAt(0) ?? 0;
+        if (code >= 32 && code !== 127 && secret.length < 4096) {
+          secret += character;
+          output.write('*');
+        }
+      }
+    };
+
+    input.setEncoding?.('utf8');
+    input.setRawMode(true);
+    input.resume?.();
+    input.on('data', onData);
+  });
 }
 
 export async function configureClaudeSettings(configDir) {
@@ -139,6 +211,8 @@ export async function install() {
   const configured = await configureClaudeSettings();
   console.log(`${configured.changed ? '已写入' : '已存在'}函数钩子开关：${configured.settingsPath}`);
 
+  const apiKey = process.env.SSY_API_KEY?.trim() || await promptSecret();
+
   const marketplaces = claudeJson(['plugin', 'marketplace', 'list']);
   if (jsonContains(marketplaces, MARKETPLACE_SOURCE) || jsonContains(marketplaces, MARKETPLACE_NAME)) {
     console.log('正在更新现有 marketplace…');
@@ -150,15 +224,14 @@ export async function install() {
 
   const plugins = claudeJson(['plugin', 'list']);
   if (jsonContains(plugins, PLUGIN_ID)) {
-    console.log('插件已安装，正在更新…');
-    runClaude(['plugin', 'update', PLUGIN_ID, '--scope', 'user']);
-  } else {
-    console.log('正在安装插件；请在提示框中粘贴胜算云 API Key…');
-    runClaude(['plugin', 'install', PLUGIN_ID, '--scope', 'user']);
+    console.log('检测到旧安装，正在重装以写入 API Key…');
+    runClaude(['plugin', 'uninstall', PLUGIN_ID, '--scope', 'user'], 'Plugin uninstall');
   }
+  console.log('正在安装插件并安全写入 API Key…');
+  runClaude(pluginInstallArgs(apiKey), 'Plugin install');
 
   console.log('\n接入完成。重启 Claude Code，或在当前会话执行 /reload-plugins。');
-  console.log('API Key 由 Claude Code 作为敏感 userConfig 保存，不会写入本项目。');
+  console.log('API Key 已由 Claude Code 作为敏感 userConfig 保存，不会写入本项目。');
 }
 
 export function printHelp() {
@@ -168,7 +241,7 @@ export function printHelp() {
   npx --yes github:DM010727/jev-claudecode-ssy
 
 自动检查 Claude Code 版本、启用函数钩子、注册 marketplace 并安装插件。
-API Key 通过 Claude Code 的敏感 userConfig 输入，不接受命令行明文参数。`);
+安装过程中会用掩码提示输入 API Key，并交给 Claude Code 的敏感 userConfig 保存。`);
 }
 
 const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';

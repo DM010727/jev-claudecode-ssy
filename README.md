@@ -15,7 +15,7 @@ npx --yes github:DM010727/jev-claudecode-ssy
 1. 检查 Claude Code；低于 `2.1.274` 时调用官方更新命令。
 2. 合并 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` 到用户设置，保留现有配置并在修改前备份。
 3. 注册本仓库为插件 marketplace，并安装或更新插件。
-4. 让 Claude Code 用敏感配置框收取胜算云 API Key；Key 不写入仓库。
+4. 在终端中用掩码提示用户输入胜算云 API Key，再交给 Claude Code 的敏感 `userConfig` 保存；Key 不回显、不写入仓库。
 
 完成后重启 Claude Code，或在当前会话执行 `/reload-plugins`。
 
@@ -23,7 +23,7 @@ npx --yes github:DM010727/jev-claudecode-ssy
 
 把下面这句话发给 Claude Code 即可：
 
-> 请帮我接入胜算云 Jev 上下文压缩插件：运行 `npx --yes github:DM010727/jev-claudecode-ssy`，完成后提醒我执行 `/reload-plugins`；API Key 只允许我在 Claude Code 的敏感配置界面输入，不要写进代码、命令或聊天记录。
+> 请告诉我在自己的终端运行 `npx --yes github:DM010727/jev-claudecode-ssy` 来接入胜算云 Jev 上下文压缩插件；安装器会用掩码让我输入 API Key，完成后提醒我执行 `/reload-plugins`。
 
 ### 手动安装（备用）
 

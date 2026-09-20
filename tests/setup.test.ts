@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { EventEmitter } from 'node:events';
 
 import {
   compareVersions,
   enableFunctionHooks,
   extractVersion,
   jsonContains,
+  pluginInstallArgs,
+  promptSecret,
 } from '../bin/setup.mjs';
 
 describe('one-command installer helpers', () => {
@@ -29,5 +32,40 @@ describe('one-command installer helpers', () => {
     const value = [{ source: { repo: 'DM010727/jev-claudecode-ssy' } }];
     expect(jsonContains(value, 'dm010727/JEV-CLAUDECODE-SSY')).toBe(true);
     expect(jsonContains(value, 'other/plugin')).toBe(false);
+  });
+
+  it('passes the masked key through the declared sensitive plugin config', () => {
+    expect(pluginInstallArgs('test-key')).toEqual([
+      'plugin',
+      'install',
+      'jev-claudecode-ssy@jev-claudecode-ssy',
+      '--scope',
+      'user',
+      '--config',
+      'apiKey=test-key',
+    ]);
+  });
+
+  it('reads an API key without echoing it', async () => {
+    class FakeInput extends EventEmitter {
+      isTTY = true;
+      raw = false;
+      setRawMode(value: boolean) { this.raw = value; }
+      setEncoding() {}
+      resume() {}
+      pause() {}
+    }
+    const input = new FakeInput();
+    let shown = '';
+    const promise = promptSecret({
+      input,
+      output: { write(value: string) { shown += value; } },
+    });
+    input.emit('data', 'secret-value\r');
+
+    await expect(promise).resolves.toBe('secret-value');
+    expect(shown).not.toContain('secret-value');
+    expect(shown).toContain('*'.repeat('secret-value'.length));
+    expect(input.raw).toBe(false);
   });
 });
