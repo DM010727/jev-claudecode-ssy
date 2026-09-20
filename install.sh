@@ -6,7 +6,7 @@ umask 077
 MARKETPLACE_SOURCE="DM010727/jev-claudecode-ssy"
 MARKETPLACE_NAME="jev-claudecode-ssy"
 PLUGIN_ID="jev-claudecode-ssy@jev-claudecode-ssy"
-PLUGIN_VERSION="1.1.3"
+PLUGIN_VERSION="1.1.4"
 
 if ! command -v claude >/dev/null 2>&1; then
   echo "未找到 Claude Code。请先安装：https://claude.ai/install" >&2

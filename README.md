@@ -163,7 +163,9 @@ curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/in
 
 如果旧版本提示 `$.http.fetch: refused: nonessential network traffic is disabled for this session`，请更新到 `1.1.1` 或更高版本。新版已绕开压缩阶段受限的宿主 HTTP 通道。
 
-重新打开 Claude Code 后，日志应显示 `jev-claudecode-ssy v1.1.3 loaded (curl transport)`。如果仍看到 `$.http.fetch`，说明当前进程加载的仍是旧插件，而不是胜算云接口故障。
+`1.1.3` 虽然已改用 curl，但其中一次 `$.process.run` 被作为函数值传递，未通过 Claude Code 的函数钩子安全扫描，表现为插件已启用却只加载 `review` Skill。`1.1.4` 已改为扫描器要求的直接调用，并以 `claude plugin validate .claude-plugin/plugin.json --strict` 作为发布前校验。
+
+重新打开 Claude Code 后，日志应显示 `jev-claudecode-ssy v1.1.4 loaded (curl transport)`。如果仍看到 `$.http.fetch`，说明当前进程加载的仍是旧插件，而不是胜算云接口故障。
 
 ### 更新插件或更换 Key
 

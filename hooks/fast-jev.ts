@@ -51,8 +51,13 @@ export type HookProcessRun = (
   init?: { stdin?: string; timeoutMs?: number },
 ) => Promise<HookProcessRunResult>;
 
+export type CurlInvocation = {
+  stdin: string;
+  timeoutMs: number;
+};
+
 const CURL_STATUS_MARKER = '__JEV_HTTP_STATUS__:';
-export const PLUGIN_VERSION = '1.1.3';
+export const PLUGIN_VERSION = '1.1.4';
 
 export function startupMessage(): string {
   return `jev-claudecode-ssy v${PLUGIN_VERSION} loaded (curl transport)`;
@@ -78,11 +83,10 @@ function curlBodyValue(value: string): string {
  * execution path whose child owns its network access. The complete request,
  * including the API key, travels over stdin rather than argv or a temp file.
  */
-export async function curlFetch(
-  run: HookProcessRun,
+export function curlInvocation(
   url: string,
   init: HookFetchInit = {},
-): Promise<HookFetchResponse> {
+): CurlInvocation {
   if (!url.startsWith('https://')) throw new Error('Jev endpoint must use HTTPS');
   const lines = [
     'silent',
@@ -98,17 +102,13 @@ export async function curlFetch(
   if (init.body !== undefined) lines.push(`data-binary = ${curlBodyValue(init.body)}`);
   lines.push(`write-out = ${curlBodyValue(`\n${CURL_STATUS_MARKER}%{http_code}`)}`);
 
-  let result: HookProcessRunResult;
-  try {
-    result = await run(['curl', '-q', '--config', '-'], {
-      stdin: `${lines.join('\n')}\n`,
-      timeoutMs: 75_000,
-    });
-  } catch (error) {
-    throw new Error(
-      `Could not start curl: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
+  return {
+    stdin: `${lines.join('\n')}\n`,
+    timeoutMs: 75_000,
+  };
+}
+
+export function parseCurlResult(result: HookProcessRunResult): HookFetchResponse {
   if (result.exitCode !== 0) {
     throw new Error(`curl failed (${result.exitCode}): ${result.stderr.trim().slice(0, 200)}`);
   }
@@ -124,6 +124,23 @@ export async function curlFetch(
     ok: status >= 200 && status < 300,
     text: result.stdout.slice(0, markerIndex),
   };
+}
+
+export async function curlFetch(
+  run: HookProcessRun,
+  url: string,
+  init: HookFetchInit = {},
+): Promise<HookFetchResponse> {
+  const invocation = curlInvocation(url, init);
+  let result: HookProcessRunResult;
+  try {
+    result = await run(['curl', '-q', '--config', '-'], invocation);
+  } catch (error) {
+    throw new Error(
+      `Could not start curl: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  return parseCurlResult(result);
 }
 
 export type HookConfig = CompactOptions & {
@@ -310,36 +327,15 @@ export function decisionLogLines(
   );
 }
 
-async function getApiKey(
-  $: {
-    env: { get: (name: string) => Promise<string | undefined> };
-    settings: { read: () => Promise<Readonly<Record<string, unknown>>> };
-  },
-  config: HookConfig,
-): Promise<string | undefined> {
-  if (config.apiKey) return config.apiKey;
-  const fromEnv = await $.env.get('SSY_API_KEY');
-  if (fromEnv) return fromEnv;
-  const settings = await $.settings.read();
+function apiKeyFromSettings(
+  settings: Readonly<Record<string, unknown>>,
+): string | undefined {
   const env = settings['env'];
   if (env && typeof env === 'object') {
     const value = (env as Record<string, unknown>)['SSY_API_KEY'];
     if (typeof value === 'string' && value) return value;
   }
   return undefined;
-}
-
-function notify(
-  $: {
-    ui: {
-      log: (text: string) => void;
-      toast: (text: string, options?: { timeoutMs?: number }) => void;
-    };
-  },
-  text: string,
-): void {
-  $.ui.log(text);
-  $.ui.toast(text, { timeoutMs: 15_000 });
 }
 
 export const register: Register = (on: On, options: PluginOptions) => {
@@ -353,28 +349,48 @@ export const register: Register = (on: On, options: PluginOptions) => {
 
   on('session.compact', async ($, event, next) => {
     try {
-      const config = { ...configured, apiKey: await getApiKey($, configured) };
-      const { result, messages } = await compactSession(event.messages, config, (url, init) =>
-        curlFetch($.process.run, url, init),
+      const envApiKey = configured.apiKey ? undefined : await $.env.get('SSY_API_KEY');
+      const settingsApiKey =
+        configured.apiKey || envApiKey
+          ? undefined
+          : apiKeyFromSettings(await $.settings.read());
+      const config = { ...configured, apiKey: configured.apiKey ?? envApiKey ?? settingsApiKey };
+      const { result, messages } = await compactSession(
+        event.messages,
+        config,
+        async (url, init) => {
+          const invocation = curlInvocation(url, init);
+          let processResult: HookProcessRunResult;
+          try {
+            // Function-hook scanning requires engine capabilities to be called
+            // literally at their use site; do not pass $.process.run as a value.
+            processResult = await $.process.run(
+              ['curl', '-q', '--config', '-'],
+              invocation,
+            );
+          } catch (error) {
+            throw new Error(
+              `Could not start curl: ${error instanceof Error ? error.message : String(error)}`,
+            );
+          }
+          return parseCurlResult(processResult);
+        },
       );
       for (const line of decisionLogLines(result)) $.ui.log(line);
       if (reductionRatio(result) < config.minReductionRatio) {
-        notify(
-          $,
-          `fallback to built-in summary (below ${percent(config.minReductionRatio)} minimum: ${summarize(result)})`,
-        );
+        const text = `fallback to built-in summary (below ${percent(config.minReductionRatio)} minimum: ${summarize(result)})`;
+        $.ui.log(text);
+        $.ui.toast(text, { timeoutMs: 15_000 });
         return next(event);
       }
-      notify(
-        $,
-        `kept ${messages.length}/${event.messages.length} messages, no summary (${summarize(result)})`,
-      );
+      const text = `kept ${messages.length}/${event.messages.length} messages, no summary (${summarize(result)})`;
+      $.ui.log(text);
+      $.ui.toast(text, { timeoutMs: 15_000 });
       return { messages };
     } catch (error) {
-      notify(
-        $,
-        `fallback to built-in summary (${error instanceof Error ? error.message : String(error)})`,
-      );
+      const text = `fallback to built-in summary (${error instanceof Error ? error.message : String(error)})`;
+      $.ui.log(text);
+      $.ui.toast(text, { timeoutMs: 15_000 });
       return next(event);
     }
   });

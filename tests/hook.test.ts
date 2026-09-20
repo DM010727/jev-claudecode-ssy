@@ -72,7 +72,7 @@ describe('hook config', () => {
 
 describe('plugin startup', () => {
   it('reports the loaded version and transport', () => {
-    expect(startupMessage()).toBe('jev-claudecode-ssy v1.1.3 loaded (curl transport)');
+    expect(startupMessage()).toBe('jev-claudecode-ssy v1.1.4 loaded (curl transport)');
   });
 });
 
