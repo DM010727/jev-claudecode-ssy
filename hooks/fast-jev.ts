@@ -52,6 +52,11 @@ export type HookProcessRun = (
 ) => Promise<HookProcessRunResult>;
 
 const CURL_STATUS_MARKER = '__JEV_HTTP_STATUS__:';
+export const PLUGIN_VERSION = '1.1.3';
+
+export function startupMessage(): string {
+  return `jev-claudecode-ssy v${PLUGIN_VERSION} loaded (curl transport)`;
+}
 
 function curlConfigValue(value: string): string {
   if (/[\r\n]/.test(value)) throw new Error('Jev request header contains a newline');
@@ -340,6 +345,11 @@ function notify(
 export const register: Register = (on: On, options: PluginOptions) => {
   const configured = resolveHookConfig(options);
   let compacting = false;
+
+  on('session.start', ($, event, next) => {
+    $.ui.log(startupMessage());
+    return next(event);
+  });
 
   on('session.compact', async ($, event, next) => {
     try {

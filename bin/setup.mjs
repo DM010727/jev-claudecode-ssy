@@ -10,6 +10,7 @@ export const MIN_CLAUDE_VERSION = '2.1.274';
 export const MARKETPLACE_SOURCE = 'DM010727/jev-claudecode-ssy';
 export const MARKETPLACE_NAME = 'jev-claudecode-ssy';
 export const PLUGIN_ID = 'jev-claudecode-ssy@jev-claudecode-ssy';
+export const PLUGIN_VERSION = '1.1.3';
 export const REVIEW_KEY_DIRECTORY = '.jev-claudecode-ssy';
 
 export function extractVersion(text) {
@@ -248,7 +249,8 @@ export async function install() {
   runClaude(pluginInstallArgs(apiKey), 'Plugin install');
   const reviewKeyPath = await saveReviewApiKey(apiKey);
 
-  console.log('\n接入完成。重启 Claude Code，或在当前会话执行 /reload-plugins。');
+  console.log(`\n已安装 Jev Claude Code 胜算云适配器 v${PLUGIN_VERSION}。`);
+  console.log('请彻底退出所有 Claude Code 进程后重新打开；不要只在旧会话执行 /reload-plugins。');
   console.log('API Key 已写入 Claude Code 敏感 userConfig，并保存给 Jev 并行审查工具使用。');
   console.log(`审查工具配置：${reviewKeyPath}`);
 }

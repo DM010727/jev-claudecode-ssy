@@ -6,6 +6,7 @@ umask 077
 MARKETPLACE_SOURCE="DM010727/jev-claudecode-ssy"
 MARKETPLACE_NAME="jev-claudecode-ssy"
 PLUGIN_ID="jev-claudecode-ssy@jev-claudecode-ssy"
+PLUGIN_VERSION="1.1.3"
 
 if ! command -v claude >/dev/null 2>&1; then
   echo "未找到 Claude Code。请先安装：https://claude.ai/install" >&2
@@ -103,5 +104,6 @@ chmod 600 "$REVIEW_CONFIG_DIR/api-key"
 unset API_KEY
 
 echo
-echo "接入完成。重启 Claude Code，或在当前会话执行 /reload-plugins。"
+echo "已安装 Jev Claude Code 胜算云适配器 v$PLUGIN_VERSION。"
+echo "请彻底退出所有 Claude Code 进程后重新打开；不要只在旧会话执行 /reload-plugins。"
 echo "Jev 并行审查工具也已配置完成。"

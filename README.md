@@ -25,11 +25,7 @@ npx --yes github:DM010727/jev-claudecode-ssy
 curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/install.sh | bash
 ```
 
-安装程序会直接提示输入胜算云 API Key。输入内容不会显示在屏幕上，按回车即可继续。安装完成后，重启 Claude Code，或在当前会话执行：
-
-```text
-/reload-plugins
-```
+安装程序会直接提示输入胜算云 API Key。输入内容不会显示在屏幕上，按回车即可继续。安装完成后，请**彻底退出所有 Claude Code 进程再重新打开**。函数 hook 在进程内注册，更新后不要只在旧会话执行 `/reload-plugins`。
 
 > 已经安装过也可以直接重新运行同一条命令。安装程序每次都会询问 Key，并用新配置重装插件，适合更新版本或更换 Key。
 
@@ -43,7 +39,7 @@ curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/in
 把下面这句话发给 Claude Code：
 
 ```text
-请从 https://github.com/DM010727/jev-claudecode-ssy 安装 Jev 胜算云适配器；安装后提示我配置胜算云 API Key，并执行 /reload-plugins。
+请从 https://github.com/DM010727/jev-claudecode-ssy 安装 Jev 胜算云适配器；安装后提示我配置胜算云 API Key，并彻底退出所有 Claude Code 进程后重新打开。
 ```
 
 ## 怎么确认已经生效
@@ -166,6 +162,8 @@ curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/in
 查看提示中的原因。常见情况包括 Key 无效、网络暂时不可用、对话中没有足够多的旧工具调用，或精简比例低于默认的 `25%`。插件会自动调用 Claude Code 原生压缩，因此不会卡住当前会话。
 
 如果旧版本提示 `$.http.fetch: refused: nonessential network traffic is disabled for this session`，请更新到 `1.1.1` 或更高版本。新版已绕开压缩阶段受限的宿主 HTTP 通道。
+
+重新打开 Claude Code 后，日志应显示 `jev-claudecode-ssy v1.1.3 loaded (curl transport)`。如果仍看到 `$.http.fetch`，说明当前进程加载的仍是旧插件，而不是胜算云接口故障。
 
 ### 更新插件或更换 Key
 

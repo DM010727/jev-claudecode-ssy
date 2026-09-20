@@ -5,6 +5,7 @@ import {
   decisionLog,
   decisionLogLines,
   resolveHookConfig,
+  startupMessage,
   summarize,
   toSessionMessages,
 } from '../hooks/fast-jev.ts';
@@ -66,6 +67,12 @@ describe('hook config', () => {
       compactAtPercent: 60,
       minReductionRatio: 0.25,
     });
+  });
+});
+
+describe('plugin startup', () => {
+  it('reports the loaded version and transport', () => {
+    expect(startupMessage()).toBe('jev-claudecode-ssy v1.1.3 loaded (curl transport)');
   });
 });
 
