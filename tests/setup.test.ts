@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { EventEmitter } from 'node:events';
+import { mkdtemp, readFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 
 import {
   compareVersions,
@@ -9,6 +12,7 @@ import {
   parseJsonOutput,
   pluginInstallArgs,
   promptSecret,
+  saveReviewApiKey,
 } from '../bin/setup.mjs';
 
 describe('one-command installer helpers', () => {
@@ -80,5 +84,13 @@ describe('one-command installer helpers', () => {
     expect(shown).not.toContain('secret-value');
     expect(shown).toContain('*'.repeat('secret-value'.length));
     expect(input.raw).toBe(false);
+  });
+
+  it('stores the key for the Jev review command outside the project', async () => {
+    const home = await mkdtemp(path.join(tmpdir(), 'jev-setup-'));
+    const keyPath = await saveReviewApiKey('review-key', home);
+
+    expect(keyPath).toBe(path.join(home, '.jev-claudecode-ssy', 'api-key'));
+    await expect(readFile(keyPath, 'utf8')).resolves.toBe('review-key\n');
   });
 });

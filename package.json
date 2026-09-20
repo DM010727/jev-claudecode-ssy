@@ -1,7 +1,7 @@
 {
   "name": "jev-claudecode-ssy",
-  "version": "1.0.2",
-  "description": "One-command Jev context compaction for Claude Code through Shengsuanyun.",
+  "version": "1.1.0",
+  "description": "Jev context compaction and parallel PR review for Claude Code through Shengsuanyun.",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -24,6 +24,7 @@
   "files": [
     "dist",
     "bin",
+    "skills",
     "install.sh",
     "README.md",
     "LICENSE"

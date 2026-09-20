@@ -60,8 +60,14 @@ claude plugin marketplace update "$MARKETPLACE_NAME"
 echo "正在安装插件并写入 API Key…"
 claude plugin uninstall "$PLUGIN_ID" --scope user >/dev/null 2>&1 || true
 claude plugin install "$PLUGIN_ID" --scope user --config "apiKey=$API_KEY"
+
+REVIEW_CONFIG_DIR="$HOME/.jev-claudecode-ssy"
+mkdir -p "$REVIEW_CONFIG_DIR"
+chmod 700 "$REVIEW_CONFIG_DIR"
+printf '%s\n' "$API_KEY" > "$REVIEW_CONFIG_DIR/api-key"
+chmod 600 "$REVIEW_CONFIG_DIR/api-key"
 unset API_KEY
 
 echo
 echo "接入完成。重启 Claude Code，或在当前会话执行 /reload-plugins。"
-
+echo "Jev 并行审查工具也已配置完成。"

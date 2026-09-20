@@ -10,6 +10,7 @@ export const MIN_CLAUDE_VERSION = '2.1.274';
 export const MARKETPLACE_SOURCE = 'DM010727/jev-claudecode-ssy';
 export const MARKETPLACE_NAME = 'jev-claudecode-ssy';
 export const PLUGIN_ID = 'jev-claudecode-ssy@jev-claudecode-ssy';
+export const REVIEW_KEY_DIRECTORY = '.jev-claudecode-ssy';
 
 export function extractVersion(text) {
   return text.match(/\b(\d+\.\d+\.\d+)\b/)?.[1];
@@ -191,6 +192,14 @@ export async function configureClaudeSettings(configDir) {
   return { settingsPath, changed: true };
 }
 
+export async function saveReviewApiKey(apiKey, homeDirectory = homedir()) {
+  const directory = path.join(homeDirectory, REVIEW_KEY_DIRECTORY);
+  const keyPath = path.join(directory, 'api-key');
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  await writeFile(keyPath, `${apiKey.trim()}\n`, { encoding: 'utf8', mode: 0o600 });
+  return keyPath;
+}
+
 function installedClaudeVersion() {
   const result = commandResult(['--version']);
   if (result.error?.code === 'ENOENT' || result.status !== 0) {
@@ -237,9 +246,11 @@ export async function install() {
   }
   console.log('正在安装插件并安全写入 API Key…');
   runClaude(pluginInstallArgs(apiKey), 'Plugin install');
+  const reviewKeyPath = await saveReviewApiKey(apiKey);
 
   console.log('\n接入完成。重启 Claude Code，或在当前会话执行 /reload-plugins。');
-  console.log('API Key 已由 Claude Code 作为敏感 userConfig 保存，不会写入本项目。');
+  console.log('API Key 已写入 Claude Code 敏感 userConfig，并保存给 Jev 并行审查工具使用。');
+  console.log(`审查工具配置：${reviewKeyPath}`);
 }
 
 export function printHelp() {
@@ -249,7 +260,7 @@ export function printHelp() {
   npx --yes github:DM010727/jev-claudecode-ssy
 
 自动检查 Claude Code 版本、启用函数钩子、注册 marketplace 并安装插件。
-安装过程中会用掩码提示输入 API Key，并交给 Claude Code 的敏感 userConfig 保存。`);
+安装过程中会用掩码提示输入 API Key，配置上下文压缩和 Jev 并行 PR Review。`);
 }
 
 const entry = process.argv[1] ? path.resolve(process.argv[1]) : '';

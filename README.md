@@ -1,4 +1,4 @@
-# Jev Claude Code · 胜算云版
+# Jev接入Claude code（胜算云版）
 
 让 Claude Code 在长时间编码时，用 Jev 判断哪些旧工具调用仍然有用，再进行无摘要压缩。用户与 Claude 的文字对话保持原文，主要清理已经失去价值的工具调用和工具结果。
 
@@ -33,6 +33,11 @@ curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/in
 
 > 已经安装过也可以直接重新运行同一条命令。安装程序每次都会询问 Key，并用新配置重装插件，适合更新版本或更换 Key。
 
+安装器会同时配置两项能力：
+
+- Jev 无摘要上下文压缩：长时间编码时保留原始文字，清理失去价值的旧工具结果。
+- Jev 并行代码审查：用 Superpowers 风格拆分审查 Agent，再由 Jev 批量复核候选问题。
+
 ## 也可以直接告诉 Claude Code
 
 把下面这句话发给 Claude Code：
@@ -58,6 +63,30 @@ kept 18/31 messages, no summary (...)
 这表示 Jev 已经完成判断，Claude Code 使用清理后的原始消息继续工作，而不是把整个历史改写成一段摘要。
 
 插件默认也会在上下文使用率达到 `60%` 时尝试自动压缩。
+
+## 快速做 Code Review / PR Review
+
+安装 `1.1.0` 或更高版本后，在 Claude Code 中直接输入：
+
+```text
+/jev-claudecode-ssy:review 123
+```
+
+也可以传 PR URL、分支、commit 范围或当前未提交改动：
+
+```text
+/jev-claudecode-ssy:review https://github.com/owner/repo/pull/123
+/jev-claudecode-ssy:review 审查当前分支相对 main 的改动
+/jev-claudecode-ssy:review 审查当前未提交代码，重点看并发和数据安全
+```
+
+审查流程分为三层：
+
+1. 按正确性、安全、兼容性、测试和性能等独立问题域并行派遣审查 Agent。
+2. 汇总带有 `file:line`、失败场景和代码证据的候选问题。
+3. 把所有候选一次提交给胜算云 Jev，并行判断问题是否成立、严重度和证据是否足够，再生成最终合并建议。
+
+默认只输出审查报告，不修改代码，也不会直接在 GitHub 发布评论。只有明确要求“发布到 PR”时才会执行外部操作。
 
 ## 它是怎么接入 Jev 的
 
@@ -168,6 +197,8 @@ npm run validate:plugin
 ```
 
 仓库同时提供可独立调用的 TypeScript 压缩库，入口为 `src/index.ts`；Claude Code 适配层位于 `hooks/fast-jev.ts`。
+
+并行审查 Skill 位于 `skills/review/SKILL.md`，Jev 批量决策命令位于 `bin/jev-decide.mjs` 和 `bin/jev-decide.sh`。
 
 ## License
 
