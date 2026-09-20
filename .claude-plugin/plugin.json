@@ -1,7 +1,7 @@
 {
   "name": "jev-claudecode-ssy",
   "displayName": "Jev Context Compaction · Shengsuanyun",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Verbatim Jev-guided context compaction for Claude Code through Shengsuanyun.",
   "author": {
     "name": "DM010727"

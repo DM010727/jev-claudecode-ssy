@@ -4,18 +4,30 @@
 
 ## 30 秒接入
 
-在 PowerShell、CMD、Bash 或 Zsh 中运行同一条命令：
+### Windows
+
+在 PowerShell 或 CMD 中运行：
 
 ```sh
 npx --yes github:DM010727/jev-claudecode-ssy
 ```
+
+### macOS（不需要 Node/npm/npx）
+
+macOS 终端运行：
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/install.sh | bash
+```
+
+macOS 原生脚本只依赖系统自带的 `curl`、`bash` 和 `plutil`，会直接提示输入胜算云 API Key。
 
 安装器会自动：
 
 1. 检查 Claude Code；低于 `2.1.274` 时调用官方更新命令。
 2. 合并 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` 到用户设置，保留现有配置并在修改前备份。
 3. 注册本仓库为插件 marketplace，并安装或更新插件。
-4. 在终端中用掩码提示用户输入胜算云 API Key，再交给 Claude Code 的敏感 `userConfig` 保存；Key 不回显、不写入仓库。
+4. 每次运行安装器都明确提示用户输入胜算云 API Key，再交给 Claude Code 的 `userConfig` 保存；不会因机器上已有环境变量而跳过输入。
 
 完成后重启 Claude Code，或在当前会话执行 `/reload-plugins`。
 
@@ -23,7 +35,7 @@ npx --yes github:DM010727/jev-claudecode-ssy
 
 把下面这句话发给 Claude Code 即可：
 
-> 请告诉我在自己的终端运行 `npx --yes github:DM010727/jev-claudecode-ssy` 来接入胜算云 Jev 上下文压缩插件；安装器会用掩码让我输入 API Key，完成后提醒我执行 `/reload-plugins`。
+> 请根据我的系统告诉我运行胜算云 Jev 插件的一键安装命令：Windows 使用 `npx --yes github:DM010727/jev-claudecode-ssy`，macOS 使用仓库 README 里的 `curl | bash` 命令；安装器会让我输入 API Key，完成后提醒我执行 `/reload-plugins`。
 
 ### 手动安装（备用）
 

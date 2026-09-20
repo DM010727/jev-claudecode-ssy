@@ -57,8 +57,14 @@ function runClaude(args, label = 'Claude Code command') {
   }
 }
 
-function parseLastJsonLine(text) {
-  const lines = text.trim().split(/\r?\n/).reverse();
+export function parseJsonOutput(text) {
+  const trimmed = text.trim();
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    // Some commands print a human-readable preamble before a final JSON line.
+  }
+  const lines = trimmed.split(/\r?\n/).reverse();
   for (const line of lines) {
     try {
       return JSON.parse(line);
@@ -72,7 +78,7 @@ function parseLastJsonLine(text) {
 function claudeJson(args) {
   const result = commandResult([...args, '--json']);
   if (result.error || result.status !== 0) return undefined;
-  return parseLastJsonLine(result.stdout ?? '');
+  return parseJsonOutput(result.stdout ?? '');
 }
 
 export function jsonContains(value, needle) {
@@ -211,7 +217,9 @@ export async function install() {
   const configured = await configureClaudeSettings();
   console.log(`${configured.changed ? '已写入' : '已存在'}函数钩子开关：${configured.settingsPath}`);
 
-  const apiKey = process.env.SSY_API_KEY?.trim() || await promptSecret();
+  // Always ask. A stale machine-level SSY_API_KEY must not silently configure
+  // a fresh install with a key the user did not choose for this plugin.
+  const apiKey = await promptSecret();
 
   const marketplaces = claudeJson(['plugin', 'marketplace', 'list']);
   if (jsonContains(marketplaces, MARKETPLACE_SOURCE) || jsonContains(marketplaces, MARKETPLACE_NAME)) {

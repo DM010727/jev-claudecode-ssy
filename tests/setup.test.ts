@@ -6,6 +6,7 @@ import {
   enableFunctionHooks,
   extractVersion,
   jsonContains,
+  parseJsonOutput,
   pluginInstallArgs,
   promptSecret,
 } from '../bin/setup.mjs';
@@ -32,6 +33,18 @@ describe('one-command installer helpers', () => {
     const value = [{ source: { repo: 'DM010727/jev-claudecode-ssy' } }];
     expect(jsonContains(value, 'dm010727/JEV-CLAUDECODE-SSY')).toBe(true);
     expect(jsonContains(value, 'other/plugin')).toBe(false);
+  });
+
+  it('parses pretty-printed multi-line Claude JSON output', () => {
+    const output = `[
+      {
+        "id": "jev-claudecode-ssy@jev-claudecode-ssy",
+        "scope": "user"
+      }
+    ]`;
+    expect(parseJsonOutput(output)).toEqual([
+      { id: 'jev-claudecode-ssy@jev-claudecode-ssy', scope: 'user' },
+    ]);
   });
 
   it('passes the masked key through the declared sensitive plugin config', () => {

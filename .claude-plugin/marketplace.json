@@ -10,7 +10,7 @@
       "name": "jev-claudecode-ssy",
       "source": "./",
       "description": "Verbatim Jev-guided context compaction for Claude Code through Shengsuanyun.",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "license": "MIT"
     }
   ]
