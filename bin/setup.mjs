@@ -10,7 +10,7 @@ export const MIN_CLAUDE_VERSION = '2.1.274';
 export const MARKETPLACE_SOURCE = 'DM010727/jev-claudecode-ssy';
 export const MARKETPLACE_NAME = 'jev-claudecode-ssy';
 export const PLUGIN_ID = 'jev-claudecode-ssy@jev-claudecode-ssy';
-export const PLUGIN_VERSION = '1.1.5';
+export const PLUGIN_VERSION = '1.2.0';
 export const REVIEW_KEY_DIRECTORY = '.jev-claudecode-ssy';
 
 export function extractVersion(text) {

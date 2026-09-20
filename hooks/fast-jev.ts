@@ -10,6 +10,10 @@ import type {
 
 import { compact, reductionRatio, resolveOptions } from '../src/compact.js';
 import { buildJevRequest, DEFAULT_MODEL, parseJevResponse } from '../src/request.js';
+import {
+  addUsage, BALANCE_URL, emptyUsage, formatUsageReport, friendlyError, parseBalance,
+  type Balance, type UsageReport,
+} from './usage.js';
 import type {
   CompactOptions,
   CompactResult,
@@ -29,6 +33,7 @@ export type HookFetchInit = {
   method?: string;
   headers?: Record<string, string>;
   body?: string;
+  timeoutMs?: number;
 };
 
 export type HookFetchResponse = {
@@ -57,7 +62,7 @@ export type CurlInvocation = {
 };
 
 const CURL_STATUS_MARKER = '__JEV_HTTP_STATUS__:';
-export const PLUGIN_VERSION = '1.1.5';
+export const PLUGIN_VERSION = '1.2.0';
 
 export function startupMessage(): string {
   return `jev-claudecode-ssy v${PLUGIN_VERSION} loaded (curl transport)`;
@@ -88,12 +93,13 @@ export function curlInvocation(
   init: HookFetchInit = {},
 ): CurlInvocation {
   if (!url.startsWith('https://')) throw new Error('Jev endpoint must use HTTPS');
+  const timeoutMs = Math.max(1000, Math.min(60_000, init.timeoutMs ?? 60_000));
   const lines = [
     'silent',
     'show-error',
     `url = ${curlConfigValue(url)}`,
     `request = ${curlConfigValue(init.method ?? 'GET')}`,
-    'max-time = 60',
+    `max-time = ${timeoutMs / 1000}`,
   ];
   for (const [name, value] of Object.entries(init.headers ?? {})) {
     if (/[\r\n]/.test(name)) throw new Error('Jev request header name contains a newline');
@@ -104,7 +110,7 @@ export function curlInvocation(
 
   return {
     stdin: `${lines.join('\n')}\n`,
-    timeoutMs: 75_000,
+    timeoutMs: timeoutMs + (init.timeoutMs === undefined ? 15_000 : 1000),
   };
 }
 
@@ -275,6 +281,58 @@ export async function compactSession(
   return { result, messages: toSessionMessages(messages, result.messages) };
 }
 
+async function readBalance(fetchFn: HookFetch, apiKey: string): Promise<Balance | undefined> {
+  try {
+    const response = await fetchFn(BALANCE_URL, {
+      method: 'GET', headers: { authorization: `Bearer ${apiKey}` }, timeoutMs: 3000,
+    });
+    return response.ok ? parseBalance(response.text) : undefined;
+  } catch { return undefined; }
+}
+
+/** Balance checks are best-effort and only run when a Jev request is needed. */
+export async function compactWithUsage(
+  messages: readonly SessionMessage[], config: HookConfig, fetchFn: HookFetch,
+): Promise<UsageReport & { messages?: SessionMessage[] }> {
+  const started = Date.now();
+  const report: UsageReport & { messages?: SessionMessage[] } = {
+    usage: emptyUsage(), applied: false, ms: 0,
+  };
+  let before: Promise<Balance | undefined> | undefined;
+  const pending: Promise<HookFetchResponse>[] = [];
+  const measuredFetch: HookFetch = (url, init) => {
+    const request = (async () => {
+      before ??= readBalance(fetchFn, config.apiKey!);
+      await before;
+      report.usage.requests += 1;
+      report.usage.questions += Object.keys(JSON.parse(init?.body ?? '{}').questions ?? {}).length;
+      const response = await fetchFn(url, init);
+      if (response.ok) addUsage(report.usage, response.text);
+      return response;
+    })();
+    pending.push(request);
+    return request;
+  };
+  try {
+    const output = await compactSession(messages, config, measuredFetch);
+    report.result = output.result;
+    report.applied = output.result.stats.requests > 0 && reductionRatio(output.result) >= config.minReductionRatio;
+    if (report.applied) report.messages = output.messages;
+    else report.reason = report.usage.requests === 0 ? '没有可清理的旧工具调用'
+      : `内容缩减未达到 ${percent(config.minReductionRatio)} 阈值`;
+  } catch (error) {
+    report.reason = friendlyError(error);
+  }
+  // A rejected batch must not hide tokens reported later by its parallel peers.
+  await Promise.allSettled(pending);
+  if (before) {
+    report.before = await before;
+    report.after = await readBalance(fetchFn, config.apiKey!);
+  }
+  report.ms = Date.now() - started;
+  return report;
+}
+
 function percent(ratio: number): string {
   return `${Math.round(ratio * 100)}%`;
 }
@@ -341,13 +399,19 @@ function apiKeyFromSettings(
 export const register: Register = (on: On, options: PluginOptions) => {
   const configured = resolveHookConfig(options);
   let compacting = false;
+  let lastReport = '本会话尚无 Jev 压缩用量。执行 /compact 后可在这里查看。';
 
-  on('session.start', ($, event, next) => {
+  on('session.start', async ($, event, next) => {
     $.ui.log(startupMessage());
+    await $.command.register({ name: 'jev-usage', description: '查看最近一次 Jev 压缩效果、token 和模力金额变化' });
     return next(event);
   });
 
+  on('command.run', { command: 'jev-usage' }, () => ({ text: lastReport }));
+
   on('session.compact', async ($, event, next) => {
+    $.ui.status('Jev 正在评估旧工具调用…');
+    let report: UsageReport & { messages?: SessionMessage[] };
     try {
       const envApiKey = configured.apiKey ? undefined : await $.env.get('SSY_API_KEY');
       const settingsApiKey =
@@ -355,7 +419,7 @@ export const register: Register = (on: On, options: PluginOptions) => {
           ? undefined
           : apiKeyFromSettings(await $.settings.read());
       const config = { ...configured, apiKey: configured.apiKey ?? envApiKey ?? settingsApiKey };
-      const { result, messages } = await compactSession(
+      report = await compactWithUsage(
         event.messages,
         config,
         async (url, init) => {
@@ -376,23 +440,31 @@ export const register: Register = (on: On, options: PluginOptions) => {
           return parseCurlResult(processResult);
         },
       );
-      for (const line of decisionLogLines(result)) $.ui.log(line);
-      if (reductionRatio(result) < config.minReductionRatio) {
-        const text = `fallback to built-in summary (below ${percent(config.minReductionRatio)} minimum: ${summarize(result)})`;
-        $.ui.log(text);
-        $.ui.toast(text, { timeoutMs: 15_000 });
-        return next(event);
-      }
-      const text = `kept ${messages.length}/${event.messages.length} messages, no summary (${summarize(result)})`;
-      $.ui.log(text);
-      $.ui.toast(text, { timeoutMs: 15_000 });
-      return { messages };
     } catch (error) {
-      const text = `fallback to built-in summary (${error instanceof Error ? error.message : String(error)})`;
-      $.ui.log(text);
-      $.ui.toast(text, { timeoutMs: 15_000 });
-      return next(event);
+      report = { usage: emptyUsage(), applied: false, reason: friendlyError(error), ms: 0 };
     }
+    // Publish fallback details after core finishes, so its transcript reset does
+    // not swallow the report. The pinned status also survives normal redraws.
+    let fallback;
+    if (!report.applied) {
+      $.ui.status('Jev 未接管，正在运行 Claude 内置压缩…');
+      try {
+        fallback = await next(event);
+        report.reason += fallback.skip ? `；内置压缩已跳过：${fallback.skip}` : '；已使用 Claude 内置压缩';
+      } catch (error) {
+        const display = formatUsageReport(report);
+        lastReport = [...display.lines, 'Claude 内置压缩也未完成，请稍后重试。'].join('\n');
+        $.ui.log(lastReport);
+        $.ui.status('压缩未完成 · /jev-usage 查看 Jev 用量');
+        throw error;
+      }
+    }
+    const display = formatUsageReport(report);
+    lastReport = display.lines.join('\n');
+    for (const line of display.lines) $.ui.log(line);
+    $.ui.status(display.status);
+    $.ui.toast(report.applied ? 'Jev 压缩完成，用量已更新；/jev-usage 查看详情' : '压缩处理结束，/jev-usage 查看原因和用量', { timeoutMs: 15_000 });
+    return report.applied ? { messages: report.messages! } : fallback!;
   });
 
   on('turn.complete', async ($, event: TurnCompleteInput, next) => {

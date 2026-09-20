@@ -55,12 +55,34 @@ curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/42f390a
 成功时会看到类似提示：
 
 ```text
-kept 18/31 messages, no summary (...)
+Jev 压缩完成 · 保留原始对话
+消息 31 → 18；内容字符减少 42%；移除 6 项工具调用，截短 4 项结果
+Jev 请求 2 次 · 判断 40 项 · 耗时 2.3 秒
+Jev 8520 tokens（输入 8000 / 输出 520）
+期间模力减少 ¥0.001200（非单次账单）
 ```
 
 这表示 Jev 已经完成判断，Claude Code 使用清理后的原始消息继续工作，而不是把整个历史改写成一段摘要。
 
 插件默认也会在上下文使用率达到 `60%` 时尝试自动压缩。
+
+### 压缩用量与模力（1.2.0 起）
+
+以上数字只是展示示例。每次压缩后，输入框下会保留 Jev 用量状态；执行 `/jev-usage` 可重新查看本次插件加载以来最近一次压缩的完整报告，不额外调用模型。Claude 自带的 `Compacted Tip` 不变。
+
+- **请求与判断**：请求数是本次实际尝试的 Jev Decisions 请求数；每项工具调用会分别判断是否保留调用和结果，因此通常对应两个判断项。余额查询不算 Jev 请求。
+- **Token**：累计各批次响应的 `usage.input_tokens` 和 `usage.output_tokens`，包含并行批次。缺失或部分失败时明确标注“未完整返回”，不会使用状态大小估算冒充计费用量。回退到内置压缩时仍显示已消耗的 Jev token；不包含 Claude 内置摘要的用量。
+- **模力金额**：按[余额接口文档](https://lean.shengsuanyun.com/apidocs/api/balance-api)读取人民币元，无额外换算。普通账户观察账户余额与网关券之和的变化，不重复加充值余额、通用券，也不加授信。企业网关观察相同账号、项目、预算周期的消费变化。
+- **计费边界**：余额差额会受并发请求、充值、预扣和延迟结算影响，不能作为本次 Jev 的精确账单；零差额显示“暂未观测到扣费”，不会宣称免费。统计查询失败不会使压缩失败。
+
+有 Jev 请求时才在其前后各查询一次余额，每次网络超时 3 秒。不需要额外 Key；没有待评估工具调用时显示请求 0 次、消耗 0，不查询余额。
+
+已有用户可在终端更新后重新打开 Claude Code：
+
+```bash
+claude plugin marketplace update jev-claudecode-ssy
+claude plugin update jev-claudecode-ssy@jev-claudecode-ssy
+```
 
 ## 快速做 Code Review / PR Review
 
@@ -167,9 +189,9 @@ curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/42f390a
 
 `1.1.3` 虽然已改用 curl，但其中一次 `$.process.run` 被作为函数值传递，未通过 Claude Code 的函数钩子安全扫描，表现为插件已启用却只加载 `review` Skill。`1.1.4` 已改为扫描器要求的直接调用，并以 `claude plugin validate .claude-plugin/plugin.json --strict` 作为发布前校验。
 
-重新打开 Claude Code 后，日志应显示 `jev-claudecode-ssy v1.1.5 loaded (curl transport)`。如果仍看到 `$.http.fetch`，说明当前进程加载的仍是旧插件，而不是胜算云接口故障。
+重新打开 Claude Code 后，日志应显示 `jev-claudecode-ssy v1.2.0 loaded (curl transport)`。如果仍看到 `$.http.fetch`，说明当前进程加载的仍是旧插件，而不是胜算云接口故障。
 
-Claude Code 当前的插件详情页只把传统 JSON/命令钩子计入 `Installed components`，不会把早期访问的函数钩子显示在该栏。因此页面仍可能只列出 `Skills: review`；这不代表 Jev 钩子没有运行，请以上面的 `v1.1.5 loaded` 启动日志为准。
+Claude Code 当前的插件详情页只把传统 JSON/命令钩子计入 `Installed components`，不会把早期访问的函数钩子显示在该栏。因此页面仍可能只列出 `Skills: review`；这不代表 Jev 钩子没有运行，请以上面的 `v1.2.0 loaded` 启动日志为准。
 
 ### 更新插件或更换 Key
 
