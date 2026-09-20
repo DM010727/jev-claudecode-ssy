@@ -167,6 +167,8 @@ curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/in
 
 重新打开 Claude Code 后，日志应显示 `jev-claudecode-ssy v1.1.4 loaded (curl transport)`。如果仍看到 `$.http.fetch`，说明当前进程加载的仍是旧插件，而不是胜算云接口故障。
 
+Claude Code 当前的插件详情页只把传统 JSON/命令钩子计入 `Installed components`，不会把早期访问的函数钩子显示在该栏。因此页面仍可能只列出 `Skills: review`；这不代表 Jev 钩子没有运行，请以上面的 `v1.1.4 loaded` 启动日志为准。
+
 ### 更新插件或更换 Key
 
 重新运行与首次安装相同的 Windows 或 macOS 命令即可，不需要先卸载。
