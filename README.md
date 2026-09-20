@@ -1,123 +1,165 @@
 # Jev Claude Code · 胜算云版
 
-通过胜算云 Jev Decisions API 自动压缩 Claude Code 上下文。它不改写用户和助手文本，只删除已经不再需要的工具调用，或截短不再需要保留全文的工具结果。
+让 Claude Code 在长时间编码时，用 Jev 判断哪些旧工具调用仍然有用，再进行无摘要压缩。用户与 Claude 的文字对话保持原文，主要清理已经失去价值的工具调用和工具结果。
 
-## 30 秒接入
+## 一分钟接入
+
+准备好两样东西：
+
+- 已安装并登录的 Claude Code
+- 胜算云 API Key
 
 ### Windows
 
-在 PowerShell 或 CMD 中运行：
+在 PowerShell 中运行：
 
-```sh
+```powershell
 npx --yes github:DM010727/jev-claudecode-ssy
 ```
 
-### macOS（不需要 Node/npm/npx）
+### macOS（不需要安装 Node.js 或 npx）
 
-macOS 终端运行：
+在“终端”中运行：
 
-```sh
+```bash
 curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/install.sh | bash
 ```
 
-macOS 原生脚本只依赖系统自带的 `curl`、`bash` 和 `plutil`，会直接提示输入胜算云 API Key。
+安装程序会直接提示输入胜算云 API Key。输入内容不会显示在屏幕上，按回车即可继续。安装完成后，重启 Claude Code，或在当前会话执行：
 
-安装器会自动：
-
-1. 检查 Claude Code；低于 `2.1.274` 时调用官方更新命令。
-2. 合并 `CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1` 到用户设置，保留现有配置并在修改前备份。
-3. 注册本仓库为插件 marketplace，并安装或更新插件。
-4. 每次运行安装器都明确提示用户输入胜算云 API Key，再交给 Claude Code 的 `userConfig` 保存；不会因机器上已有环境变量而跳过输入。
-
-完成后重启 Claude Code，或在当前会话执行 `/reload-plugins`。
-
-### 直接对 Claude Code 说一句话
-
-把下面这句话发给 Claude Code 即可：
-
-> 请根据我的系统告诉我运行胜算云 Jev 插件的一键安装命令：Windows 使用 `npx --yes github:DM010727/jev-claudecode-ssy`，macOS 使用仓库 README 里的 `curl | bash` 命令；安装器会让我输入 API Key，完成后提醒我执行 `/reload-plugins`。
-
-### 手动安装（备用）
-
-```sh
-claude plugin marketplace add DM010727/jev-claudecode-ssy
-claude plugin install jev-claudecode-ssy@jev-claudecode-ssy
+```text
+/reload-plugins
 ```
 
-手动方式还需要在 `~/.claude/settings.json`（Windows 为 `%USERPROFILE%\.claude\settings.json`）中启用函数钩子：
+> 已经安装过也可以直接重新运行同一条命令。安装程序每次都会询问 Key，并用新配置重装插件，适合更新版本或更换 Key。
 
-```json
-{
-  "env": {
-    "CLAUDE_CODE_ENABLE_FUNCTION_HOOKS": "1"
-  }
-}
+## 也可以直接告诉 Claude Code
+
+把下面这句话发给 Claude Code：
+
+```text
+请从 https://github.com/DM010727/jev-claudecode-ssy 安装 Jev 胜算云适配器；安装后提示我配置胜算云 API Key，并执行 /reload-plugins。
 ```
 
-## 胜算云接口
+## 怎么确认已经生效
 
-默认请求与 `typesafe-jev-decisions-openapi.json` 一致：
+先进行一段包含读文件、搜索或执行命令的编码对话，然后运行：
 
-- Endpoint：`POST https://router.shengsuanyun.com/api/v1/decisions`
-- 认证：`Authorization: Bearer <胜算云 API Key>`
-- 默认模型：`jev-latest`
-- 请求：`{ model, state, questions }`
-- 响应：`{ model, answers, usage }`
+```text
+/compact
+```
 
-插件优先读取 Claude Code 的敏感 `apiKey` 配置，也支持环境变量 `SSY_API_KEY`。不要把 Key 提交到 Git、写进源码或示例文件。
+成功时会看到类似提示：
 
-## 工作原理
+```text
+kept 18/31 messages, no summary (...)
+```
 
-1. 按 `tool_use_id` 配对工具调用和结果；第一条消息及最近消息固定保留。
-2. 把完整对话状态发送给 Jev，但工具结果仅保留“成功/失败 + 字符数”摘要。
-3. 对每个候选工具调用询问两个 `noul` 问题：调用本身是否仍重要、结果全文是否仍需要。
-4. 按概率决定保留、仅截短结果或同时删除调用与结果。
-5. Jev 请求失败、响应不合法或压缩收益不足时，自动回退 Claude Code 内置压缩。
+这表示 Jev 已经完成判断，Claude Code 使用清理后的原始消息继续工作，而不是把整个历史改写成一段摘要。
 
-默认在上下文达到 60% 时触发，最近 6 条消息不参与裁剪，只有预计至少减少 25% 才替换内置压缩。
+插件默认也会在上下文使用率达到 `60%` 时尝试自动压缩。
 
-## 配置
+## 它是怎么接入 Jev 的
 
-安装或启用插件时，Claude Code 会展示以下配置项：
+适配器注册了 Claude Code 的 `session.compact` 和 `turn.complete` hooks，工作过程如下：
 
-| 配置项 | 默认值 | 说明 |
+```text
+Claude Code 会话
+    │
+    ├─ 手动 /compact，或上下文达到 60%
+    ▼
+适配器读取当前消息和工具调用
+    │
+    ├─ 首条消息与最近 6 条消息固定保留
+    ├─ 为较早的每个工具调用生成两个问题：
+    │    1. 这个调用本身是否还重要？
+    │    2. 它的完整结果是否还需要保留？
+    ▼
+胜算云 Jev Decisions API
+POST https://router.shengsuanyun.com/api/v1/decisions
+    │
+    └─ 返回每个问题的保留概率
+    ▼
+适配器按阈值重建会话
+    ├─ 保留仍有价值的调用和完整结果
+    ├─ 删除已无价值的调用
+    └─ 或把不再需要全文的工具结果截短
+    ▼
+Claude Code 使用精简后的原始对话继续编码
+```
+
+适配器使用胜算云提供的 OpenAI 兼容 Jev Decisions 接口，默认模型为 `jev-latest`。发送给 Jev 的状态包含任务目标、对话历史和工具调用信息；为了控制请求大小，工具结果不作为全文状态发送，过长内容还会逐级缩短。
+
+## 对 Claude Code 编码对话有什么改变
+
+普通的 Claude Code 压缩通常会把旧对话总结成一段新文本。总结能节省上下文，但可能丢失文件名、报错细节、用户原话或关键约束。
+
+这个适配器成功运行后，改变的是“旧工具痕迹如何保留”，不是“文字对话如何改写”：
+
+- 用户消息和 Claude 的文字回复保持原文，不生成替代它们的总结。
+- 首条消息和最近的消息固定保留，避免当前任务意图与正在进行的步骤被清掉。
+- Jev 对较早的工具调用逐项判断，例如读文件、搜索、命令输出是否还会影响下一步。
+- 仍重要的工具调用及结果原样保留。
+- 调用有用、但完整输出已不重要时，保留调用并截短结果；需要时 Claude 可以重新执行工具。
+- 调用本身已经无关时，对应的调用和结果一起移除。
+- 只有预计能达到最小压缩比例时才替换历史；收益太小、Key 无效、网络异常或 Jev 请求失败时，会自动回退到 Claude Code 自带的摘要压缩，不阻断工作。
+
+因此，长时间改代码时，上下文会更偏向保留“真实对话 + 当前仍有用的证据”，减少大量已经消费完毕的日志、搜索结果和文件内容占用上下文。
+
+## 常见问题
+
+### macOS 提示 `command not found: npx`
+
+macOS 直接使用不依赖 npx 的安装命令：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/DM010727/jev-claudecode-ssy/main/install.sh | bash
+```
+
+### 安装时没有让我输入 Key
+
+重新运行上面的最新安装命令。`1.0.2` 及以上版本会在每次安装或更新时主动询问 Key，即使电脑中已经存在相关环境变量。
+
+### 显示 `8 userConfig options not yet set`
+
+这是正常提示。`apiKey` 已经由安装程序写入，其余 8 个高级选项使用默认值，不影响使用。
+
+### 出现 `npm warn Unknown user config`
+
+这是本机 npm 配置产生的警告，与本插件和胜算云 API 无关。只要后面显示安装完成即可。
+
+### `/compact` 回退到 built-in summary
+
+查看提示中的原因。常见情况包括 Key 无效、网络暂时不可用、对话中没有足够多的旧工具调用，或精简比例低于默认的 `25%`。插件会自动调用 Claude Code 原生压缩，因此不会卡住当前会话。
+
+### 更新插件或更换 Key
+
+重新运行与首次安装相同的 Windows 或 macOS 命令即可，不需要先卸载。
+
+## 默认配置
+
+| 配置项 | 默认值 | 作用 |
 | --- | ---: | --- |
-| `apiKey` | 推荐配置 | 胜算云 API Key，按敏感信息保存；也可使用 `SSY_API_KEY` |
-| `model` | `jev-latest` | 胜算云 Jev 模型 |
-| `keepThreshold` | `0.5` | 保留调用或结果的最低概率 |
-| `preserveRecentMessages` | `6` | 固定保留的最近消息数 |
-| `compactAtPercent` | `60` | 自动触发压缩的上下文百分比 |
-| `minReductionRatio` | `0.25` | 接管内置压缩所需的最低缩减比例 |
-| `maxStateTokens` | `25000` | 发送给 Jev 的状态预算 |
-| `maxRequestTokens` | `30000` | 单次请求总预算 |
-| `truncateHeadChars` | `300` | 截短结果时保留的头部字符数 |
+| `model` | `jev-latest` | 胜算云上的 Jev 模型 |
+| `keepThreshold` | `0.5` | Jev 保留概率阈值 |
+| `preserveRecentMessages` | `6` | 固定保留的最新消息数量 |
+| `compactAtPercent` | `60` | 自动触发压缩的上下文占用百分比 |
+| `minReductionRatio` | `0.25` | 接管历史所需的最小预计压缩比例 |
+| `maxStateTokens` | `25000` | 单次 Jev 状态预算 |
+| `maxRequestTokens` | `30000` | 单次完整请求预算 |
+| `truncateHeadChars` | `300` | 截短工具结果时保留的开头字符数 |
 
-## 作为 TypeScript 库使用
+这些参数无需手工设置即可使用。需要调整时，可在 Claude Code 中执行：
 
-```sh
-npm install github:DM010727/jev-claudecode-ssy
+```text
+/plugin configure jev-claudecode-ssy@jev-claudecode-ssy
 ```
 
-```ts
-import { compactMessages, type Message } from 'jev-claudecode-ssy';
+## 开发与测试
 
-const messages: Message[] = [
-  { role: 'user', text: '修复测试，禁止修改 generated 目录。', toolUses: [] },
-];
+项目要求 Node.js 18 或更高版本：
 
-const result = await compactMessages(messages, {
-  apiKey: process.env.SSY_API_KEY,
-  preserveRecentMessages: 4,
-});
-
-console.log(result.messages, result.stats);
-```
-
-可以通过 `baseUrl` 覆盖默认地址，通过实现 `JevAsker` 使用自定义传输层。完整构建块仍从包入口导出。
-
-## 本地开发
-
-```sh
+```bash
 npm install
 npm run typecheck
 npm test
@@ -125,14 +167,8 @@ npm run build
 npm run validate:plugin
 ```
 
-单元测试使用假 Jev 响应，不会请求胜算云，也不会消耗额度。若要从当前 checkout 直接加载：
+仓库同时提供可独立调用的 TypeScript 压缩库，入口为 `src/index.ts`；Claude Code 适配层位于 `hooks/fast-jev.ts`。
 
-```sh
-CLAUDE_CODE_ENABLE_FUNCTION_HOOKS=1 claude --plugin-dir .
-```
+## License
 
-## 限制
-
-- 函数钩子仍属于 Claude Code 的早期能力，升级 Claude Code 后应重新运行类型检查和插件验证。
-- Token 数为估算值，不是模型 tokenizer 的精确结果。
-- Jev 给出的概率不是绝对证明；需要时 Claude Code 仍可重新运行工具。
+[MIT](LICENSE)
